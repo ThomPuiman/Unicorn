@@ -1,6 +1,9 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System.Web;
+using Kamsar.WebConsole;
 using Sitecore.Configuration;
+using Sitecore.Data;
 using Sitecore.Diagnostics;
 using Unicorn.Publishing;
 
@@ -25,13 +28,30 @@ namespace Unicorn.Pipelines.UnicornSyncEnd
 
 			if (_targetDatabases == null || _targetDatabases.Count == 0) return;
 
+		    if (!string.IsNullOrWhiteSpace(HttpContext.Current.Request.QueryString["publishDbs"]))
+		    {
+		        List<string> dbNames = HttpContext.Current.Request.QueryString["publishDbs"].Split(',').ToList();
+                dbNames.ForEach(AddTargetDatabase);
+		    }
+
 			var dbs = _targetDatabases.Select(Factory.GetDatabase).ToArray();
-			var trigger = Factory.GetDatabase("master").GetItem(PublishTriggerItemId);
+
+		    string[] deepPublish = PublishTriggerItemId.Split(',');
+
+		    if (HttpContext.Current.Request.QueryString["fullPublish"] == "true")
+		    {
+		        foreach (string path in deepPublish)
+		        {
+		            var extractPath = path.Split(':');
+                    var trigger = Factory.GetDatabase(extractPath[0]).GetItem(extractPath[1]);
+                    ManualPublishQueueHandler.AddItemToPublish(trigger.ID, extractPath[0]);
+		        }
+		    }
+
 
 			Assert.IsTrue(dbs.Length > 0, "No valid databases specified to publish to.");
-			Assert.IsNotNull(trigger, "Invalid trigger item ID");
 
-			if (ManualPublishQueueHandler.PublishQueuedItems(trigger, dbs))
+			if (ManualPublishQueueHandler.PublishQueuedItems(dbs))
 			{
 				Log.Info("Unicorn: initiated publishing of synced items.", this);
 			}
